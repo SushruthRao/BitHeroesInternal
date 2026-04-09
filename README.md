@@ -5,4 +5,6 @@ A Internal mod made for educational purposes, inject using [SharpMonoInjector](h
 <br>
 Change the dll path to where you downloaded the DLL <br>
 To open menu ingame press <b>F8</b> 
-![Alt text]([https://ibb.co/hJZKxTJq](https://ibb.co/hJZKxTJq))
+<br>
+<img width="640" height="355" alt="image" src="https://github.com/user-attachments/assets/dbe99532-f54b-48c5-be76-7b06c119e86f" />
+
