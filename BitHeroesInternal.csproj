@@ -33,6 +33,7 @@
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Bit Heroes\Bit Heroes_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Mono.Security">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Bit Heroes\Bit Heroes_Data\Managed\Mono.Security.dll</HintPath>

@@ -1,6 +1,5 @@
 using com.ultrabit.bitheroes.core;
 using com.ultrabit.bitheroes.model.application;
-using com.ultrabit.bitheroes.ui;
 using com.ultrabit.bitheroes.ui.utility;
 using TMPro;
 using UnityEngine;
@@ -13,6 +12,14 @@ namespace BitHeroesInternal
         private GameObject windowInstance;
         private CheckBoxTile testingCheckbox;
         private bool isOpen;
+
+        // Tab state
+        private Button hacksBtn;
+        private Button aboutBtn;
+        private GameObject hacksPanel;
+        private GameObject aboutPanel;
+        private readonly Color activeColor = Color.white;
+        private readonly Color inactiveColor = new Color(1f, 1f, 1f, 0.5f);
 
         public void Toggle()
         {
@@ -35,11 +42,8 @@ namespace BitHeroesInternal
         {
             if (windowInstance != null)
             {
-                var wm = windowInstance.GetComponent<WindowsMain>();
-                if (wm != null)
-                    wm.OnClose();
-                else
-                    Destroy(windowInstance);
+                GameData.instance.audioManager.PlaySoundLink("buttonclick", 1f);
+                Destroy(windowInstance);
             }
             windowInstance = null;
             isOpen = false;
@@ -63,16 +67,29 @@ namespace BitHeroesInternal
             // Get reference to the GameSettingsWindow component to access its fields
             var settingsWindow = windowInstance.GetComponent<com.ultrabit.bitheroes.ui.game.GameSettingsWindow>();
 
-            // Grab the checkBoxPrefab from the general panel before we destroy it
+            // Grab prefabs from the general panel before we destroy it
             Transform checkBoxPrefab = settingsWindow.gameSettingsGeneralPanel.checkBoxPrefab;
+            Transform textPrefab = settingsWindow.gameSettingsGeneralPanel.textPrefab;
             float listWidth = settingsWindow.gameSettingsGeneralPanel.GetComponent<RectTransform>().sizeDelta.x;
-            // Grab the content container reference for sizing
             GameObject panelContent = settingsWindow.gameSettingsGeneralPanel.gameSettingsPanelContent;
+
+            // Save references to the tab buttons we want to repurpose
+            hacksBtn = settingsWindow.generalBtn;
+            aboutBtn = settingsWindow.languageBtn;
+
+            // Save references to the panels and their content containers (which have VerticalLayoutGroup + ScrollRect)
+            hacksPanel = settingsWindow.gameSettingsGeneralPanel.gameObject;
+            aboutPanel = settingsWindow.gameSettingsLanguagePanel.gameObject;
+            GameObject aboutPanelContent = settingsWindow.gameSettingsLanguagePanel.gameSettingsLanguageContent;
+
+            // Grab the close button before destroying the component (GameSettingsWindow extends WindowsMain,
+            // so destroying it removes the WindowsMain too — we need to wire up close ourselves)
+            Button closeBtn = settingsWindow.closeBtn;
 
             // Destroy the GameSettingsWindow component so it doesn't run its own Start()
             Destroy(settingsWindow);
 
-            // Set the title text
+            // --- Set title text ---
             var topperTexts = windowInstance.GetComponentsInChildren<TextMeshProUGUI>(true);
             foreach (var txt in topperTexts)
             {
@@ -85,25 +102,41 @@ namespace BitHeroesInternal
                 }
             }
 
-            // Find and clear/hide the game-specific UI elements
-            // Hide all tab buttons (general, language, support, news, ignores, forums, logout, admin, test, dates, google)
-            var buttons = windowInstance.GetComponentsInChildren<Button>(true);
-            foreach (var btn in buttons)
+            // --- Configure tabs ---
+            // Repurpose generalBtn as "Hacks" tab
+            hacksBtn.GetComponentInChildren<TextMeshProUGUI>().text = "Hacks";
+            hacksBtn.gameObject.SetActive(true);
+            hacksBtn.onClick.RemoveAllListeners();
+            hacksBtn.onClick.AddListener(OnHacksTab);
+
+            // Repurpose languageBtn as "About" tab
+            aboutBtn.GetComponentInChildren<TextMeshProUGUI>().text = "About";
+            aboutBtn.gameObject.SetActive(true);
+            aboutBtn.onClick.RemoveAllListeners();
+            aboutBtn.onClick.AddListener(OnAboutTab);
+
+            // Hide all other tab buttons
+            var allButtons = windowInstance.GetComponentsInChildren<Button>(true);
+            foreach (var btn in allButtons)
             {
+                if (btn == hacksBtn || btn == aboutBtn)
+                    continue;
+
                 string btnName = btn.gameObject.name.ToLower();
-                // Keep the close button, hide everything else that's a tab/action button
                 if (btnName.Contains("close"))
                     continue;
-                if (btnName.Contains("general") || btnName.Contains("language") || btnName.Contains("support") ||
-                    btnName.Contains("news") || btnName.Contains("ignore") || btnName.Contains("forum") ||
-                    btnName.Contains("logout") || btnName.Contains("admin") || btnName.Contains("test") ||
-                    btnName.Contains("dates") || btnName.Contains("google"))
+
+                if (btnName.Contains("support") || btnName.Contains("news") ||
+                    btnName.Contains("ignore") || btnName.Contains("forum") ||
+                    btnName.Contains("logout") || btnName.Contains("admin") ||
+                    btnName.Contains("test") || btnName.Contains("dates") ||
+                    btnName.Contains("google"))
                 {
                     btn.gameObject.SetActive(false);
                 }
             }
 
-            // Hide the footer text (terms, privacy, account request)
+            // Hide footer text (terms, privacy, account request)
             foreach (var txt in topperTexts)
             {
                 string txtName = txt.gameObject.name.ToLower();
@@ -113,33 +146,25 @@ namespace BitHeroesInternal
                 }
             }
 
-            // Hide the language and support panels
-            var languagePanel = windowInstance.GetComponentInChildren<com.ultrabit.bitheroes.ui.game.GameSettingsLanguagePanel>(true);
-            if (languagePanel != null)
-                languagePanel.gameObject.SetActive(false);
-
+            // Hide the support panel
             var supportPanel = windowInstance.GetComponentInChildren<com.ultrabit.bitheroes.ui.game.GameSettingsSupportPanel>(true);
             if (supportPanel != null)
                 supportPanel.gameObject.SetActive(false);
 
-            // Clear the general panel's existing content (all the game's checkboxes/sliders)
-            var generalPanel = windowInstance.GetComponentInChildren<com.ultrabit.bitheroes.ui.game.GameSettingsGeneralPanel>(true);
-            if (generalPanel != null)
-            {
-                // Clear the content container children
-                if (panelContent != null)
-                {
-                    for (int i = panelContent.transform.childCount - 1; i >= 0; i--)
-                    {
-                        Destroy(panelContent.transform.GetChild(i).gameObject);
-                    }
-                }
+            // --- Set up Hacks panel content ---
+            // Destroy the GeneralPanel script so it doesn't init its own checkboxes
+            var generalPanelScript = hacksPanel.GetComponent<com.ultrabit.bitheroes.ui.game.GameSettingsGeneralPanel>();
+            if (generalPanelScript != null)
+                Destroy(generalPanelScript);
 
-                // Destroy the panel's script so it doesn't init its own checkboxes
-                Destroy(generalPanel);
+            // Clear existing content
+            if (panelContent != null)
+            {
+                for (int i = panelContent.transform.childCount - 1; i >= 0; i--)
+                    Destroy(panelContent.transform.GetChild(i).gameObject);
             }
 
-            // Now add our own CheckBoxTile using the game's prefab
+            // Add our SpeedHack checkbox
             if (checkBoxPrefab != null && panelContent != null)
             {
                 Transform checkboxTransform = Instantiate(checkBoxPrefab);
@@ -155,22 +180,110 @@ namespace BitHeroesInternal
                     null
                 );
 
-                // Wire up the toggle change directly
                 testingCheckbox.toggle.onValueChanged.AddListener(OnTestingToggleChanged);
             }
 
-            // Trigger the animator to scroll the window in (same as the game does)
+            // --- Set up About panel content ---
+            // Destroy the LanguagePanel script so it doesn't init its own checkboxes
+            var languagePanelScript = aboutPanel.GetComponent<com.ultrabit.bitheroes.ui.game.GameSettingsLanguagePanel>();
+            if (languagePanelScript != null)
+                Destroy(languagePanelScript);
+
+            // Clear the content container children (this container has VerticalLayoutGroup for proper stacking/scrolling)
+            if (aboutPanelContent != null)
+            {
+                for (int i = aboutPanelContent.transform.childCount - 1; i >= 0; i--)
+                    Destroy(aboutPanelContent.transform.GetChild(i).gameObject);
+            }
+
+            // Use the game's textPrefab for about content, parented to the content container
+            if (textPrefab != null && aboutPanelContent != null)
+            {
+
+                Transform urlLine = Instantiate(textPrefab);
+                urlLine.SetParent(aboutPanelContent.transform, false);
+                urlLine.GetComponent<TextMeshProUGUI>().text = "github.com/SushruthRao/BitHeroesInternal";
+                urlLine.GetComponent<RectTransform>().sizeDelta = new Vector2(listWidth, urlLine.GetComponent<RectTransform>().sizeDelta.y);
+
+                Transform titleLine = Instantiate(textPrefab);
+                titleLine.SetParent(aboutPanelContent.transform, false);
+                titleLine.GetComponent<TextMeshProUGUI>().text = "BH Internal";
+                titleLine.GetComponent<RectTransform>().sizeDelta = new Vector2(listWidth, titleLine.GetComponent<RectTransform>().sizeDelta.y);
+
+                Transform descLine = Instantiate(textPrefab);
+                descLine.SetParent(aboutPanelContent.transform, false);
+                descLine.GetComponent<TextMeshProUGUI>().text = "A Bit Heroes internal tool made by sr03";
+                descLine.GetComponent<RectTransform>().sizeDelta = new Vector2(listWidth, descLine.GetComponent<RectTransform>().sizeDelta.y);
+
+                Transform descLine2 = Instantiate(textPrefab);
+                descLine2.SetParent(aboutPanelContent.transform, false);
+                descLine2.GetComponent<TextMeshProUGUI>().text = "Discord : sr_003";
+                descLine2.GetComponent<RectTransform>().sizeDelta = new Vector2(listWidth, descLine2.GetComponent<RectTransform>().sizeDelta.y);
+
+                Transform hotkeyLine = Instantiate(textPrefab);
+                hotkeyLine.SetParent(aboutPanelContent.transform, false);
+                hotkeyLine.GetComponent<TextMeshProUGUI>().text = "Hotkey: F8 to toggle window";
+                hotkeyLine.GetComponent<RectTransform>().sizeDelta = new Vector2(listWidth, hotkeyLine.GetComponent<RectTransform>().sizeDelta.y);
+            }
+
+            // --- Start on Hacks tab ---
+            SetTab(0);
+
+            // Wire up the close button manually since we destroyed the WindowsMain component
+            if (closeBtn != null)
+            {
+                closeBtn.onClick.RemoveAllListeners();
+                closeBtn.onClick.AddListener(Close);
+            }
+
+            // Trigger the animator to scroll the window in
             Animator animator = windowInstance.GetComponent<Animator>();
             if (animator != null)
                 animator.SetBool("onDown", true);
+        }
 
-            // Set up the WindowsMain component for proper window behavior
-            var windowsMain = windowInstance.GetComponent<WindowsMain>();
-            if (windowsMain != null)
+        private void SetTab(int tab)
+        {
+            if (tab == 0)
             {
-                windowsMain.DESTROYED.AddListener(OnWindowDestroyed);
-                // Let WindowsMain.Start() run naturally - it calls CreateWindow()
+                // Hacks tab active
+                hacksBtn.image.color = activeColor;
+                hacksBtn.GetComponentInChildren<TextMeshProUGUI>().color = activeColor;
+                hacksBtn.enabled = false;
+
+                aboutBtn.image.color = inactiveColor;
+                aboutBtn.GetComponentInChildren<TextMeshProUGUI>().color = inactiveColor;
+                aboutBtn.enabled = true;
+
+                hacksPanel.SetActive(true);
+                aboutPanel.SetActive(false);
             }
+            else
+            {
+                // About tab active
+                aboutBtn.image.color = activeColor;
+                aboutBtn.GetComponentInChildren<TextMeshProUGUI>().color = activeColor;
+                aboutBtn.enabled = false;
+
+                hacksBtn.image.color = inactiveColor;
+                hacksBtn.GetComponentInChildren<TextMeshProUGUI>().color = inactiveColor;
+                hacksBtn.enabled = true;
+
+                aboutPanel.SetActive(true);
+                hacksPanel.SetActive(false);
+            }
+        }
+
+        private void OnHacksTab()
+        {
+            GameData.instance.audioManager.PlaySoundLink("buttonclick", 1f);
+            SetTab(0);
+        }
+
+        private void OnAboutTab()
+        {
+            GameData.instance.audioManager.PlaySoundLink("buttonclick", 1f);
+            SetTab(1);
         }
 
         private void OnTestingToggleChanged(bool value)
@@ -186,7 +299,6 @@ namespace BitHeroesInternal
 
         private void Update()
         {
-            // Sync toggle if TESTING changed externally (e.g. F7 key)
             if (testingCheckbox != null && testingCheckbox.isChecked != AppInfo.TESTING)
             {
                 testingCheckbox.isChecked = AppInfo.TESTING;
